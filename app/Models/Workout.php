@@ -8,6 +8,7 @@ class Workout extends Model
 {
     protected $fillable = [
         'user_id',
+        'trainer_id',
         'workout_date',
         'title',
     ];
@@ -17,17 +18,23 @@ class Workout extends Model
     ];
 
     /**
-     * Связь: Тренировка принадлежит ОДНОМУ пользователю
-     * (Many-to-One)
+     * Связь: Тренировка принадлежит ОДНОМУ основному пользователю (автору)
      */
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * Связь: Тренировка проведена ТРЕНЕРОМ
+     */
+    public function trainer()
+    {
+        return $this->belongsTo(User::class, 'trainer_id');
     }
 
     /**
      * Связь: У тренировки МНОГО подходов
-     * (One-to-Many)
      */
     public function sets()
     {
@@ -35,13 +42,10 @@ class Workout extends Model
     }
 
     /**
-     * Связь: Упражнения, которые выполнялись в этой тренировке
-     * (через таблицу sets)
+     * Связь: Пользователи, участвовавшие в этой тренировке (для групповых)
      */
-    public function exercises()
+    public function users()
     {
-        return $this->belongsToMany(Exercise::class, 'sets')
-            ->withPivot('set_number', 'weight_kg', 'reps')
-            ->withTimestamps();
+        return $this->belongsToMany(User::class, 'user_workout')->withTimestamps();
     }
 }

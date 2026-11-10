@@ -41,10 +41,6 @@ class User extends Authenticatable
      * Связь: У пользователя МНОГО тренировок
      * (One-to-Many)
      */
-    public function workouts()
-    {
-        return $this->hasMany(Workout::class);
-    }
 
     /**
      * Проверка: является ли пользователь админом
@@ -61,4 +57,24 @@ class User extends Authenticatable
     {
         return $this->role && $this->role->name === 'trainer';
     }
+    // Пользователь принадлежит тренеру
+// Тренировки, где пользователь является участником (лично или в группе)
+    public function workouts()
+    {
+    return $this->belongsToMany(Workout::class, 'user_workout')->withTimestamps();
+    }
+
+// Тренировки, которые пользователь провёл как тренер
+    public function trainedWorkouts()
+{
+    return $this->hasMany(Workout::class, 'trainer_id');
+}
+
+// Подопечные (пользователи, у которых этот пользователь является тренером хотя бы в одной тренировке)
+    public function clients()
+{
+    return $this->belongsToMany(User::class, 'user_workout', 'trainer_id', 'user_id')->distinct();
+    // Примечание: для простоты мы будем получать клиентов через запрос в контроллере, 
+    // но эта связь полезна для понимания.
+}
 }

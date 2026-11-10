@@ -18,7 +18,24 @@
 
     <form action="{{ route('workouts.store') }}" method="POST">
         @csrf
+        <div style="margin-bottom: 20px; padding: 15px; background: #e8f4f8; border-radius: 8px;">
+    <label style="font-weight: bold; display: block; margin-bottom: 8px;">Участники тренировки:</label>
+    <select name="user_ids[]" multiple required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd; height: 100px;">
+        @php
+            // Если пользователь тренер, он видит всех. Если нет - только себя.
+            $availableUsers = auth()->user()->isTrainer() || auth()->user()->isAdmin() 
+                ? \App\Models\User::where('role_id', '!=', 1)->get() // Все, кроме админов
+                : \App\Models\User::where('id', auth()->id())->get(); // Только себя
+        @endphp
         
+        @foreach ($availableUsers as $u)
+            <option value="{{ $u->id }}" {{ $u->id === auth()->id() ? 'selected' : '' }}>
+                {{ $u->login }} {{ $u->id === auth()->id() ? '(Вы)' : '' }}
+            </option>
+        @endforeach
+    </select>
+    <small style="color: #666;">Зажмите Ctrl (или Cmd на Mac), чтобы выбрать нескольких человек для групповой тренировки.</small>
+</div>
         <div style="display: flex; gap: 20px; margin-bottom: 20px;">
             <div style="flex: 1;">
                 <label style="font-weight: bold;">Дата тренировки:</label><br>

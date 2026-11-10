@@ -14,15 +14,24 @@ class WorkoutController extends Controller
      * Показать список тренировок пользователя
      */
     public function index()
-    {
-        // Получаем тренировки текущего пользователя с привязанными подходами и упражнениями
-        $workouts = Workout::with(['sets.exercise'])
-            ->where('user_id', Auth::id())
-            ->orderBy('workout_date', 'desc')
-            ->paginate(10);
-            
-        return view('workouts.index', compact('workouts'));
+{
+    $user = auth()->user();
+
+    // Базовый запрос: получаем тренировки, в которых участвует текущий пользователь
+    $query = Workout::with(['users', 'sets.exercise', 'trainer'])
+        ->whereHas('users', function ($q) use ($user) {
+            $q->where('users.id', $user->id);
+        });
+
+    // Если это тренер или админ, он также видит тренировки, которые он провёл (даже если забыл добавить себя в участники)
+    if ($user->isTrainer() || $user->isAdmin()) {
+        $query->orWhere('trainer_id', $user->id);
     }
+
+    $workouts = $query->orderBy('workout_date', 'desc')->paginate(10);
+    
+    return view('workouts.index', compact('workouts'));
+}
 
     /**
      * Показать форму создания тренировки
@@ -36,11 +45,16 @@ class WorkoutController extends Controller
     /**
      * Сохранить новую тренировку с подходами
      */
+    /**
+     * Сохранить новую тренировку с подходами
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
             'workout_date' => 'required|date',
             'title' => 'nullable|string|max:255',
+            'user_ids' => 'required|array|min:1', // Массив ID пользователей (для личных и групповых)
+            'user_ids.*' => 'exists:users,id',
             'exercises' => 'required|array|min:1',
             'exercises.*.exercise_id' => 'required|exists:exercises,id',
             'exercises.*.sets' => 'required|array|min:1',
@@ -51,12 +65,16 @@ class WorkoutController extends Controller
 
         // 1. Создаем тренировку
         $workout = Workout::create([
-            'user_id' => Auth::id(),
+            'user_id' => auth()->id(),       // ⭐ ДОБАВЬТЕ ЭТУ СТРОКУ (чтобы удовлетворить требование БД NOT NULL)
+            'trainer_id' => auth()->id(),    // Тот, кто создает, является тренером
             'workout_date' => $validated['workout_date'],
             'title' => $validated['title'],
         ]);
 
-        // 2. Создаем подходы для каждого упражнения
+        // 2. Привязываем пользователей через таблицу user_workout (для групповых)
+        $workout->users()->attach($validated['user_ids']);
+
+        // 3. Создаем подходы
         foreach ($validated['exercises'] as $exerciseData) {
             foreach ($exerciseData['sets'] as $setData) {
                 Set::create([
@@ -71,7 +89,6 @@ class WorkoutController extends Controller
 
         return redirect()->route('workouts.index')->with('success', 'Тренировка успешно сохранена!');
     }
-
     /**
      * Удалить тренировку
      */
@@ -88,16 +105,12 @@ class WorkoutController extends Controller
  */
 public function show($id)
 {
-    // Находим тренировку и подтягиваем все связанные данные
-    $workout = Workout::with(['user', 'sets.exercise.muscleGroup'])
-        ->findOrFail($id);
-
-    // Проверяем, что пользователь имеет право видеть эту тренировку:
-    // - либо это его собственная тренировка
-    // - либо он админ/тренер (имеет доступ ко всем)
+    $workout = Workout::with(['user', 'sets.exercise.muscleGroup'])->findOrFail($id);
     $user = auth()->user();
+
+    // Доступ разрешен, если: это его тренировка ИЛИ он админ/тренер
     if ($workout->user_id !== $user->id && !$user->isAdmin() && !$user->isTrainer()) {
-        abort(403, 'У вас нет доступа к этой тренировке.');
+        abort(403, 'У вас нет прав для просмотра этой тренировки.');
     }
 
     return view('workouts.show', compact('workout'));
